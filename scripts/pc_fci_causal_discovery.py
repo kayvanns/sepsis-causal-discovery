@@ -1,0 +1,198 @@
+"""
+Causal Discovery Comparison Script
+
+Algorithms  : PC, FCI
+Indep tests : Fisher-Z, MV-Fisher-Z
+Miss strats : Simple mean imputation, KNN imputation, Raw NaNs (MV-Fisher-Z only)
+
+Combinations (6 runs total):
+    PC  + Fisher-Z    + simple impute
+    PC  + Fisher-Z    + KNN impute
+    PC  + MV-Fisher-Z + raw (no imputation)
+    FCI + Fisher-Z    + simple impute
+    FCI + Fisher-Z    + KNN impute
+    FCI + MV-Fisher-Z + raw (no imputation)
+
+Background knowledge enforced on every run.
+
+Outputs: graphs/<ALGO>_<TEST>_<IMPUTE>.png
+"""
+
+import os
+import numpy as np
+import pandas as pd
+from sklearn.impute import SimpleImputer, KNNImputer
+from sklearn.preprocessing import StandardScaler
+from causallearn.search.ConstraintBased.PC import pc
+from causallearn.search.ConstraintBased.FCI import fci
+from causallearn.utils.cit import fisherz, mv_fisherz
+from causallearn.utils.GraphUtils import GraphUtils
+from causallearn.utils.PCUtils.BackgroundKnowledge import BackgroundKnowledge
+
+# column groups for background knowledge and analysis
+
+DEMO_COLS   = ["anchor_age", "gender", "race"]
+PHYS_COLS   = [
+    "heart_rate_max",
+    "blood_pressure_min",
+    "spO2_min",
+    "FiO2_max",
+    "lactate_max",
+    "bilirubin_max",
+    "platelet_max",
+    "inr_max",
+    "temp_max_F",
+]
+TREAT_COLS  = ["antibiotics_given", "vaso_given"]
+OUT24_COLS  = ["aki_24h_onset_stage_y", "mechvent_24h_onset"]
+POST24_COLS = ["aki_post24h_stage", "mechvent_post24h"]
+MORT_COLS   = ["hospital_expire_flag"]
+
+CORE_COLS = DEMO_COLS + PHYS_COLS + TREAT_COLS + OUT24_COLS + POST24_COLS + MORT_COLS
+
+TIER_MAP = {
+    **{c: 0 for c in DEMO_COLS},
+    **{c: 1 for c in PHYS_COLS + TREAT_COLS+OUT24_COLS},
+    **{c: 2 for c in POST24_COLS},
+    **{c: 3 for c in MORT_COLS},
+}
+
+CATEGORICAL_COLS = ["gender", "race"]
+BINARY_COLS = [
+    "hospital_expire_flag", "antibiotics_given", "vaso_given",
+    "aki_24h_onset_stage_y", "mechvent_24h_onset",
+    "aki_post24h_stage", "mechvent_post24h",
+]
+
+# Data loadng and preprocessing
+
+def load_data(path: str):
+    df = pd.read_csv(path)
+    for col in CATEGORICAL_COLS:
+        if col in df.columns:
+            df[col] = df[col].astype("category").cat.codes.replace(-1, np.nan)
+    for col in BINARY_COLS:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+    available = [c for c in CORE_COLS if c in df.columns]
+    missing   = [c for c in CORE_COLS if c not in df.columns]
+    if missing:
+        print(f"[WARN] Columns not found and skipped: {missing}")
+    return df[available].copy(), available
+
+
+def impute_simple(arr: np.ndarray) -> np.ndarray:
+    # Mean imputation
+    return SimpleImputer(strategy="mean").fit_transform(arr)
+
+
+def impute_knn(arr: np.ndarray, n_neighbors: int = 5) -> np.ndarray:
+    """
+    KNN imputation with standard scaling.
+    Scale → impute → inverse scale so that the returned array
+    is back in the original feature units.
+    """
+    scaler = StandardScaler()
+    complete_rows = arr[~np.isnan(arr).any(axis=1)]
+    scaler.fit(complete_rows)
+
+    arr_scaled         = scaler.transform(arr)          
+    arr_imputed_scaled = KNNImputer(n_neighbors=n_neighbors).fit_transform(arr_scaled)
+    arr_imputed        = scaler.inverse_transform(arr_imputed_scaled)
+    return arr_imputed
+
+# Background knowledge construction
+
+def build_background_knowledge(nodes: list, col_names: list) -> BackgroundKnowledge:
+    """
+      Tier 0  demographics   — nothing can cause these
+      Tier 1  physiology + treatments + 24-h outcomes
+      Tier 3  post-24-h outcomes
+      Tier 4  mortality      — cannot cause anything
+    """
+
+    col_to_node = {col: nodes[i] for i, col in enumerate(col_names)}
+    bk = BackgroundKnowledge()
+    for col, tier in TIER_MAP.items():
+        if col in col_to_node:
+            bk.add_node_to_tier(col_to_node[col], tier)
+    for i, c1 in enumerate(DEMO_COLS):
+        for c2 in DEMO_COLS[i+1:]:
+            if c1 in col_to_node and c2 in col_to_node:
+                bk.add_forbidden_by_node(col_to_node[c1], col_to_node[c2])
+                bk.add_forbidden_by_node(col_to_node[c2], col_to_node[c1])
+    return bk
+
+#  Algorithms
+
+ALPHA = 0.05
+
+# (algorithm, indep_test_fn, test_label, impute_strategy, use_mvpc)
+
+RUNS = [
+    ("PC",  fisherz,    "fisherz",    "simple", False),
+    ("PC",  fisherz,    "fisherz",    "knn",    False),
+    ("PC",  mv_fisherz, "mv_fisherz", "raw",    True),
+    ("FCI", fisherz,    "fisherz",    "simple", False),
+    ("FCI", fisherz,    "fisherz",    "knn",    False),
+    ("FCI", mv_fisherz, "mv_fisherz", "raw",    False),
+]
+
+
+# Main execution loop
+
+def main():
+    os.makedirs("graphs", exist_ok=True)
+
+    print("Loading data ...")
+    df, col_names = load_data("/Users/kayvans/Documents/sepsis-causal-discovery/data/processed/analysis.csv")
+    print(f"Using {len(col_names)} columns, {len(df)} rows.\n")
+
+    raw_arr = df.to_numpy().astype(float)
+
+    print("Pre-computing imputations ...")
+    data_cache = {
+        "raw":    raw_arr,
+        "simple": impute_simple(raw_arr),
+        "knn":    impute_knn(raw_arr),
+    }
+    print("Done.\n")
+
+    for algo, test_fn, test_label, impute_strat, use_mvpc in RUNS:
+        run_name = f"{algo}_{test_label}_{impute_strat}"
+        print(f"Running {run_name} ...")
+        data = data_cache[impute_strat]
+
+        try:
+            if algo == "PC":
+                # get node objects for BK
+                cg = pc(data, alpha=ALPHA, indep_test=test_fn,
+                        mvpc=use_mvpc)
+                bk = build_background_knowledge(cg.G.get_nodes(), col_names)
+                # apply BK
+                cg = pc(data, alpha=ALPHA, indep_test=test_fn,
+                        mvpc=use_mvpc, background_knowledge=bk)
+                graph = cg.G
+
+            elif algo == "FCI":
+                # get node objects for BK
+                g0, _ = fci(data, independence_test_method=test_fn,
+                            alpha=ALPHA)
+                bk = build_background_knowledge(g0.get_nodes(), col_names)
+                # apply BK
+                graph, _ = fci(data, independence_test_method=test_fn,
+                               alpha=ALPHA, background_knowledge=bk)
+
+            out_path = f"graphs/{run_name}.png"
+            pyd = GraphUtils.to_pydot(graph, labels=col_names)
+            pyd.write_png(out_path)
+            print(f"  Saved -> {out_path}")
+
+        except Exception as e:
+            print(f"  FAILED: {e}")
+
+    print("\nDone. All graphs saved to ./graphs/")
+
+
+if __name__ == "__main__":
+    main()
