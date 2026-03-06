@@ -12,7 +12,7 @@ WITH sepsis AS (
     ON s.stay_id = i.stay_id
   WHERE s.sepsis3 = TRUE
 ),
-/* ---------- AKI within 0-24h ---------- */
+/* AKI within 0-24h */
 aki_24h AS (
   SELECT
     k.stay_id,
@@ -25,7 +25,7 @@ aki_24h AS (
   GROUP BY k.stay_id
 ),
 
-/* ---------- AKI after 24h (24h -> ICU outtime) ---------- */
+/* AKI after 24h (24h -> ICU outtime) */
 aki_post24h AS (
   SELECT
     k.stay_id,
@@ -38,8 +38,8 @@ aki_post24h AS (
   GROUP BY k.stay_id
 ),
 
-/* ---------- Mechanical ventilation within 0-24h ----------
-   We treat "overlap with window" as true if the vent interval overlaps [onset, onset+24h).
+/* Mechanical ventilation within 0-24h
+| defining "overlap with window" as true if the vent interval overlaps [onset, onset+24h).
 */
 mechvent_24h AS (
   SELECT
@@ -53,7 +53,7 @@ mechvent_24h AS (
   GROUP BY v.stay_id
 ),
 
-/* ---------- Mechanical ventilation after 24h ----------
+/* Mechanical ventilation after 24h
    Overlap with [onset+24h, ICU outtime]
 */
 mechvent_post24h AS (

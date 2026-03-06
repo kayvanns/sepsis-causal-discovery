@@ -5,14 +5,6 @@ Algorithms  : PC, FCI
 Indep tests : Fisher-Z, MV-Fisher-Z
 Miss strats : Simple mean imputation, KNN imputation, Raw NaNs (MV-Fisher-Z only)
 
-Combinations (6 runs total):
-    PC  + Fisher-Z    + simple impute
-    PC  + Fisher-Z    + KNN impute
-    PC  + MV-Fisher-Z + raw (no imputation)
-    FCI + Fisher-Z    + simple impute
-    FCI + Fisher-Z    + KNN impute
-    FCI + MV-Fisher-Z + raw (no imputation)
-
 Background knowledge enforced on every run.
 
 Outputs: graphs/<ALGO>_<TEST>_<IMPUTE>.png
@@ -28,6 +20,7 @@ from causallearn.search.ConstraintBased.FCI import fci
 from causallearn.utils.cit import fisherz, mv_fisherz
 from causallearn.utils.GraphUtils import GraphUtils
 from causallearn.utils.PCUtils.BackgroundKnowledge import BackgroundKnowledge
+import traceback
 
 # column groups for background knowledge and analysis
 
@@ -116,12 +109,26 @@ def build_background_knowledge(nodes: list, col_names: list) -> BackgroundKnowle
     for col, tier in TIER_MAP.items():
         if col in col_to_node:
             bk.add_node_to_tier(col_to_node[col], tier)
+    for col in col_names:
+        indicator_name = f"{col}_missing"
+        if indicator_name in col_to_node:
+            bk.add_node_to_tier(col_to_node[indicator_name], 1)
+
     for i, c1 in enumerate(DEMO_COLS):
         for c2 in DEMO_COLS[i+1:]:
             if c1 in col_to_node and c2 in col_to_node:
                 bk.add_forbidden_by_node(col_to_node[c1], col_to_node[c2])
                 bk.add_forbidden_by_node(col_to_node[c2], col_to_node[c1])
+
+    for col in col_names:
+            indicator_name = f"{col}_missing"
+            if col in col_to_node and indicator_name in col_to_node:
+                bk.add_forbidden_by_node(col_to_node[indicator_name], col_to_node[col])
+                for demo in DEMO_COLS:
+                    if demo in col_to_node:
+                        bk.add_forbidden_by_node(col_to_node[indicator_name], col_to_node[demo])
     return bk
+ 
 
 #  Algorithms
 
@@ -131,10 +138,12 @@ ALPHA = 0.05
 
 RUNS = [
     ("PC",  fisherz,    "fisherz",    "simple", False),
-    ("PC",  fisherz,    "fisherz",    "knn",    False),
+     ("PC",  fisherz,    "fisherz",    "simple_indicator", False),
+    ("PC",  fisherz,    "fisherz",    "knn_indicator",    False),
     ("PC",  mv_fisherz, "mv_fisherz", "raw",    True),
     ("FCI", fisherz,    "fisherz",    "simple", False),
-    ("FCI", fisherz,    "fisherz",    "knn",    False),
+    ("FCI", fisherz,    "fisherz",    "simple_indicator", False),
+    ("FCI", fisherz,    "fisherz",    "knn_indicator",    False),
     ("FCI", mv_fisherz, "mv_fisherz", "raw",    False),
 ]
 
@@ -149,26 +158,48 @@ def main():
     print(f"Using {len(col_names)} columns, {len(df)} rows.\n")
 
     raw_arr = df.to_numpy().astype(float)
-
+    
     print("Pre-computing imputations ...")
-    data_cache = {
-        "raw":    raw_arr,
-        "simple": impute_simple(raw_arr),
-        "knn":    impute_knn(raw_arr),
-    }
+    simple_arr = impute_simple(raw_arr)
+    knn_arr    = impute_knn(raw_arr)
     print("Done.\n")
+
+    # build indicator columns from raw df before imputation
+    df_simple = pd.DataFrame(simple_arr, columns=col_names)
+    df_knn    = pd.DataFrame(knn_arr,    columns=col_names)
+
+    indicator_names = []
+    for col in PHYS_COLS:
+        if col in df.columns and df[col].isna().mean() > 0.01:
+            ind = df[col].isna().astype(float)
+            df_simple[f"{col}_missing"] = ind.values
+            df_knn[f"{col}_missing"]    = ind.values
+            indicator_names.append(f"{col}_missing")
+            print(f"  [indicator] {col}: {df[col].isna().mean():.2%} missing")
+
+    simple_indicator_cols = col_names + indicator_names
+    knn_indicator_cols    = col_names + indicator_names
+    np.random.seed(42)
+
+    sample_idx = np.random.choice(len(df_simple), size=5000, replace=False)
+
+    data_by_strat = {
+        "raw":              (raw_arr, col_names),
+        "simple":           (simple_arr, col_names),
+        "simple_indicator": (df_simple[simple_indicator_cols].to_numpy()[sample_idx], simple_indicator_cols),
+        "knn_indicator":    (df_knn[knn_indicator_cols].to_numpy()[sample_idx], knn_indicator_cols)}
 
     for algo, test_fn, test_label, impute_strat, use_mvpc in RUNS:
         run_name = f"{algo}_{test_label}_{impute_strat}"
         print(f"Running {run_name} ...")
-        data = data_cache[impute_strat]
+        data,run_cols = data_by_strat[impute_strat]
 
         try:
             if algo == "PC":
                 # get node objects for BK
                 cg = pc(data, alpha=ALPHA, indep_test=test_fn,
                         mvpc=use_mvpc)
-                bk = build_background_knowledge(cg.G.get_nodes(), col_names)
+                bk = build_background_knowledge(cg.G.get_nodes(), run_cols)
                 # apply BK
                 cg = pc(data, alpha=ALPHA, indep_test=test_fn,
                         mvpc=use_mvpc, background_knowledge=bk)
@@ -178,18 +209,18 @@ def main():
                 # get node objects for BK
                 g0, _ = fci(data, independence_test_method=test_fn,
                             alpha=ALPHA)
-                bk = build_background_knowledge(g0.get_nodes(), col_names)
+                bk = build_background_knowledge(g0.get_nodes(), run_cols)
                 # apply BK
                 graph, _ = fci(data, independence_test_method=test_fn,
                                alpha=ALPHA, background_knowledge=bk)
 
             out_path = f"graphs/{run_name}.png"
-            pyd = GraphUtils.to_pydot(graph, labels=col_names)
+            pyd = GraphUtils.to_pydot(graph, labels=run_cols)
             pyd.write_png(out_path)
             print(f"  Saved -> {out_path}")
 
         except Exception as e:
-            print(f"  FAILED: {e}")
+            print(f"  FAILED: {traceback.format_exc()}")
 
     print("\nDone. All graphs saved to ./graphs/")
 

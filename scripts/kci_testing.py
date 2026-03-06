@@ -121,20 +121,36 @@ def make_indicator(df_raw: pd.DataFrame, col: str) -> pd.Series:
 # Background knowledge construction
 
 def build_background_knowledge(nodes: list, col_names: list) -> BackgroundKnowledge:
+    """
+      Tier 0  demographics   — nothing can cause these
+      Tier 1  physiology + treatments + 24-h outcomes
+      Tier 3  post-24-h outcomes
+      Tier 4  mortality      — cannot cause anything
+    """
+
     col_to_node = {col: nodes[i] for i, col in enumerate(col_names)}
     bk = BackgroundKnowledge()
     for col, tier in TIER_MAP.items():
         if col in col_to_node:
             bk.add_node_to_tier(col_to_node[col], tier)
+    for col in col_names:
+        indicator_name = f"{col}_missing"
+        if indicator_name in col_to_node:
+            bk.add_node_to_tier(col_to_node[indicator_name], 1)
+
     for i, c1 in enumerate(DEMO_COLS):
         for c2 in DEMO_COLS[i+1:]:
             if c1 in col_to_node and c2 in col_to_node:
                 bk.add_forbidden_by_node(col_to_node[c1], col_to_node[c2])
                 bk.add_forbidden_by_node(col_to_node[c2], col_to_node[c1])
+
     for col in col_names:
-        indicator_name = f"{col}_missing"
-        if col in col_to_node and indicator_name in col_to_node:
-            bk.add_forbidden_by_node(col_to_node[indicator_name], col_to_node[col])
+            indicator_name = f"{col}_missing"
+            if col in col_to_node and indicator_name in col_to_node:
+                bk.add_forbidden_by_node(col_to_node[indicator_name], col_to_node[col])
+                for demo in DEMO_COLS:
+                    if demo in col_to_node:
+                        bk.add_forbidden_by_node(col_to_node[indicator_name], col_to_node[demo])
     return bk
  
 
@@ -190,16 +206,16 @@ def main():
             # Second pass — with BK
             cg = pc(data_sample, alpha=ALPHA, indep_test=kci,background_knowledge=bk)
 
-            out_path = f"graphs/pc_all_indicators_kci.png"
+            out_path = f"graphs/pc_mean_indicators_kci.png"
             pyd = GraphUtils.to_pydot(cg.G, labels=all_cols)
             pyd.write_png(out_path)
 
             print(f"SUCCESS → {out_path}")
-            results.append(("pc_all_indicators", indicator_names, "SUCCESS", ""))
+            results.append(("pc_mean_indicators_kci", indicator_names, "SUCCESS", ""))
 
     except Exception as e:
         print(f"FAILED: {e}")
-        results.append(("pc_all_indicators", indicator_names, "FAILED", str(e)))
+        results.append(("pc_mean_indicators_kci", indicator_names, "FAILED", str(e)))
     
     try:
     # get node objects for BK
@@ -207,15 +223,15 @@ def main():
         bk = build_background_knowledge(g0.get_nodes(), all_cols)
         # apply BK
         graph, _ = fci(data_sample, independence_test_method=kci,alpha=ALPHA, background_knowledge=bk)
-        out_path = f"graphs/fci_all_indicators_kci.png"
+        out_path = f"graphs/fci_mean_indicators_kci.png"
         pyd = GraphUtils.to_pydot(graph, labels=all_cols)
         pyd.write_png(out_path)
         print(f"SUCCESS → {out_path}")
-        results.append(("fci_all_indicators", indicator_names, "SUCCESS", ""))
+        results.append(("fci_mean_indicators_kci", indicator_names, "SUCCESS", ""))
 
     except Exception as e:
         print(f"FAILED: {e}")
-        results.append(("fci_all_indicators", indicator_names, "FAILED", str(e)))
+        results.append(("fci_mean_indicators_kci", indicator_names, "FAILED", str(e)))
     
     return results
 
