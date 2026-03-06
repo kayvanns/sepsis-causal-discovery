@@ -1,15 +1,3 @@
-"""
-Causal Discovery Comparison Script
-
-Algorithms  : PC, FCI
-Indep tests : Fisher-Z, MV-Fisher-Z
-Miss strats : Simple mean imputation, KNN imputation, Raw NaNs (MV-Fisher-Z only)
-
-Background knowledge enforced on every run.
-
-Outputs: graphs/<ALGO>_<TEST>_<IMPUTE>.png
-"""
-
 import os
 import numpy as np
 import pandas as pd

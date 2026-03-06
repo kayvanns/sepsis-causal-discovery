@@ -1,15 +1,3 @@
-"""
-KCI Missingness Indicator Script
-
-Tests PC and FCI with KCI with missingness indicator columns.
-
-
-
-Outputs:
-    graphs/kci_<n_indicators>_indicators.png  (if successful)
-    kci_results.txt                            (summary of pass/fail per run)
-"""
-
 import os
 import sys
 import traceback
