@@ -214,6 +214,10 @@ def main():
         out_path = f"graphs/fci_mean_indicators_kci.png"
         pyd = GraphUtils.to_pydot(graph, labels=all_cols)
         pyd.write_png(out_path)
+        graph_path = f"graphs/{run_name}.pkl"
+        with open(graph_path, "wb") as f: 
+            pickle.dump((graph, run_cols), f) 
+            print(f" Graph object saved -> {graph_path}")
         print(f"SUCCESS → {out_path}")
         results.append(("fci_mean_indicators_kci", indicator_names, "SUCCESS", ""))
 
