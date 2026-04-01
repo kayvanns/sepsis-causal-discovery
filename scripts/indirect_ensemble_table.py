@@ -55,18 +55,18 @@ def build_ensemble_table(graph_dir):
     df["present"] = 1
 
     table = df.pivot_table(
-        index=["edge"],
+        index=["edge","cause","effect"],
         columns="run",
         values="present",
         aggfunc="max",
         fill_value=0
     ).reset_index()
 
-    avg_paths = df.groupby("edge")["num_paths"].mean().round(1).reset_index()
-    avg_paths.columns = ["edge", "avg_num_paths"]
-    table = table.merge(avg_paths, on="edge")
+    avg_paths = df.groupby(["edge","cause","effect"])["num_paths"].mean().round(1).reset_index()
+    avg_paths.columns = ["edge", "cause", "effect", "avg_num_paths"]
+    table = table.merge(avg_paths, on=["edge","cause","effect"])
     
-    run_cols = [c for c in table.columns if c not in ["edge","avg_num_paths"]]
+    run_cols = [c for c in table.columns if c not in ["edge","cause","effect","avg_num_paths"]]
     table["agreement_score"] = table[run_cols].sum(axis=1)
     table = table.sort_values("agreement_score", ascending=False).reset_index(drop=True)
     return table

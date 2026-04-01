@@ -58,14 +58,14 @@ def build_ensemble_table(graph_dir):
     df["present"] = 1
 
     table = df.pivot_table(
-        index=["edge", "path", "intermediaries", "path_length"],
+        index=["edge","cause","effect", "path", "intermediaries", "path_length"],
         columns="run",
         values="present",
         aggfunc="max",
         fill_value=0
     ).reset_index()
 
-    run_cols = [c for c in table.columns if c not in ["edge", "path", "intermediaries", "path_length"]]
+    run_cols = [c for c in table.columns if c not in ["edge","cause","effect", "path", "intermediaries", "path_length"]]
     table["agreement_score"] = table[run_cols].sum(axis=1)
     table = table.sort_values(["edge", "agreement_score"], ascending=[True, False]).reset_index(drop=True)
     return table
