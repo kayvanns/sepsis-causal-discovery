@@ -54,10 +54,9 @@ sns.heatmap(
     linecolor="#E1E5E7",
     cbar_kws={"label": "Agreement Score", "shrink": 0.5},
 )
-ax.set_xlabel("From")
-ax.set_ylabel("To")
-ax.set_title("Ensemble Causal Discovery Agreement Heatmap", fontsize=16,fontweight="bold")
-plt.xticks(rotation=45, ha="right", fontsize=12)
-plt.yticks(fontsize=12)
+ax.set_xlabel("From", color= '#121212', fontsize=12, fontweight="bold")
+ax.set_ylabel("To", color= '#121212', fontsize=12, fontweight="bold")
+plt.xticks(rotation=45, ha="right", fontsize=11)
+plt.yticks(fontsize=11)
 plt.tight_layout()
 plt.savefig("poster_figures/heatmap.png", dpi=300)

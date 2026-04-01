@@ -32,12 +32,12 @@ def run_regression(X, y):
 
 def main():
     file_path = "/Users/kayvans/Documents/sepsis-causal-discovery/data/processed/analysis.csv"
-    outcome    = "mechvent_post24h"
-    treatment  = "aki_24h_onset_x"
+    outcome    = "aki_post24h"
+    treatment  = "mechvent_24h_onset"
     covariates = ["anchor_age",
         "blood_pressure_min",
         "lactate_max",
-        "sofa_score_x","mechvent_24h_onset"
+        "sofa_score_x","aki_24h_onset_y"
     ]
     continuous = ["blood_pressure_min",
         "lactate_max","sofa_score_x"  ]
