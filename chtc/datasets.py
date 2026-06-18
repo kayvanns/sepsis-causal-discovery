@@ -13,7 +13,7 @@ KEEP_COLS = [
     "anchor_age", "gender", "race", "ckd_baseline", "BMI",
     "Heart Rate (max)", "Blood Pressure (min)", "SpO2 (min)", "FiO2 (max)",
     "Lactate (max)", "Bilirubin (max)", "Platelet (max)", "INR (max)",
-    "Temperature (Max)", "Hemoglobin (min)", "Fluid Balance (mL)", "WBC (max)",
+    "Temperature (Max)", "Hemoglobin (min)", "Fluid Balance (mL)", "WBC (max)", "Creatinine (max)", "sofa_score",
     "Antibiotics", "Vasopressors", "Diuretics",
     "aki_24h_onset", "mechvent_24h_onset",
     "aki_post24h", "mechvent_post24h",
@@ -24,7 +24,7 @@ KEEP_COLS = [
 INDICATOR_COLS = [
     "BMI", "Blood Pressure (min)", "SpO2 (min)", "FiO2 (max)",
     "Lactate (max)", "Bilirubin (max)", "Platelet (max)", "INR (max)",
-    "Temperature (Max)", "Hemoglobin (min)", "Fluid Balance (mL)", "WBC (max)"
+    "Temperature (Max)", "Hemoglobin (min)", "Fluid Balance (mL)", "WBC (max)", "Creatinine (max)"
 ]
 
 def encode_categoricals(df):

@@ -17,7 +17,7 @@ from causallearn.graph.GraphNode import GraphNode
 DEMO_COLS   = ["anchor_age", "gender", "race", "ckd_baseline", "BMI"]
 PHYS_COLS   = ["Heart Rate (max)", "Blood Pressure (min)", "SpO2 (min)", "FiO2 (max)",
                "Lactate (max)", "Bilirubin (max)", "Platelet (max)", "INR (max)",
-               "Temperature (Max)", "Hemoglobin (min)", "Fluid Balance (mL)", "WBC (max)"]
+               "Temperature (Max)", "Hemoglobin (min)", "Fluid Balance (mL)", "WBC (max)", "sofa_score", "Creatinine (max)"]
 TREAT_COLS  = ["Antibiotics", "Vasopressors", "Diuretics"]
 OUT24_COLS  = ["aki_24h_onset", "mechvent_24h_onset"]
 POST24_COLS = ["aki_post24h", "mechvent_post24h"]
